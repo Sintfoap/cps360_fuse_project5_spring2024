@@ -19,13 +19,14 @@ Signed integers are **2's complement**.
     * 8-byte ASCII magic string: "LARDFS\n\0"
     * *(all numeric fields BIG ENDIAN)*
     * 4-byte: sector size (in bytes)
+    * 4-byte: image size (in sectors)
     * 4-byte: start-of-i-list (in sectors)
     * 4-byte: start-of-i-map (in sectors)
     * 4-byte: start-of-d-pool (in sectors)
 * i-list: (an array of i-nodes indexed by i-number)
-    * 2-byte: mode bits
+    * 2-byte: mode bits [0xttttsssuuugggooo]
         * MSB
-        * type (0 bits):
+        * type (4 bits):
             * 0b0011: symlink
             * 0b0010: directory
             * 0b0001: regular file
