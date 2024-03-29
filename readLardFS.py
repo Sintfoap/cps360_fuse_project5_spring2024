@@ -39,16 +39,16 @@ class LARDIMAGE:
     def getdPools(self, idx: int, fle) -> list:
         return []
 
-    def readfile(self,sig):
+    def readfile(self,fmt):
         size = 0
-        for c in sig:
+        for c in fmt:
             d = smap.get(c, -1)
             if d == -1:
                 size = size * 10 + int(c)
                 continue
             size = size * d if size != 0 else d
         newz = self.fp + size
-        data = struct.unpack(f">{sig}",  self._file[self.fp: newz])
+        data = struct.unpack(f">{fmt}",  self._file[self.fp: newz])
         self.fp = newz
         return data[0] 
     
@@ -61,7 +61,12 @@ class iListEntry:
     def __init__(self, fp: int, file):
         self._file = file
         self.fp = fp                                # index for where the inodes are in the file
-        self.mode = self.getiNodes("h")             # mode bits
+        modeBits = self.getiNodes("h")              # mode bits
+        self.mode = (modeBits & 0xf000) >> 12         # mode
+        self.s_ugt = (modeBits & 0x0E00) >> 9         # setuid/setgid/sticky
+        self.user = (modeBits & 0x01C0) >> 6          # user [owner] R/W/X
+        self.group = (modeBits & 0x0038) >> 3         # group R/W/X
+        self.other = modeBits & 0x0007              # other R/W/X
         self.linkCount = self.getiNodes("h")        # number of links to this node
         self.ownerUID = self.getiNodes("i")         # owners userid
         self.ownerGID = self.getiNodes("i")         # owners groupid
@@ -87,7 +92,7 @@ class iListEntry:
     
     # yay __str__
     def __str__(self):
-        return (f"mode: {self.mode} linkCt: {self.linkCount}, UID: {self.ownerUID}, GID: {self.ownerGID}, ctime: {self.cTime}, mtime: {self.mTime}, atime: {self.aTime}, size: {self.nodeSize}, dsec: {self.firstDSec}")
+        return (f"mode: {self.mode} s_ugt: {self.s_ugt} user: {self.user} group: {self.group} other: {self.other} linkCt: {self.linkCount}, UID: {self.ownerUID}, GID: {self.ownerGID}, ctime: {self.cTime}, mtime: {self.mTime}, atime: {self.aTime}, size: {self.nodeSize}, dsec: {self.firstDSec}")
 
 
 class iMapEntry:
