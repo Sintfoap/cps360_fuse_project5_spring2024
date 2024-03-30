@@ -1,35 +1,70 @@
 import sys
 import struct
 
-def bread(sig, data):
-    return struct.unpack(f">{sig}", data)[0]
+def bread(fmt, data):
+    """Takes a struct format string and data to read from to return the interpreted data"""
+    return struct.unpack(f">{fmt}", data)[0]
 
 class Image:
-    def __init__(self, file):
-        self.file = file.read()
-        self.meta = MetaData(self.read(0, 28))
+    """
+    Holds the data and in memory portions of file. Also holds 
+    all of the functions to interact with the file system.
+    """
+    def __init__(self, filename):
+        self.filename = filename
+        self.meta = MetaData(open(self.filename, "rb").read()[:28])
         print(self.meta)
         self.iNodes = self.readIList()
         self.iMap = self.readIMap()
     
-    def read(self, offset, size):
-        return self.file[offset: offset + size]
+    def read(self, offset):
+        """Reads size bytes from offset in the file."""
+        file = open(self.filename, "rb")
+        data = file.read()[offset: offset + self.meta._ssize]
+        file.close()
+        return data
+
+    def write(self, offset, sector):
+        file = open(self.filename, "wb")
+        file.seek(offset)
+        file.write(sector)
+        file.close()
+
+    def writeSector(self, imap, sector):
+        self.write(self.meta.dPoolp + imap * self.meta._ssize, sector)
     
     def readIList(self):
-        data = self.read(self.meta.iListp, self.meta.iMapp - self.meta.iListp)
+        """Reads in INodes from IList and stores them in memory."""
+        size = self.meta.iMapp - self.meta.iListp
+        data = b""
+        amountRead = 0
+        while size - amountRead > 0:
+            data += self.read(self.meta.iListp + amountRead)
+            amountRead += self.meta._ssize
+        data = data[:size]
         res = []
-        for i in range(len(data) // 32):
+        for i in range(len(data) // 32): # Each i-node is 32 bytes in length
             offset = i * 32
-            res.append(INode(data[offset: offset + 32], self.meta.iListp + offset))
+            res.append(INode(data[offset: offset + 32], self.meta.iListp + offset)) # Keep track of offset for writing later
         return res
 
     def readIMap(self):
-        data = self.read(self.meta.iMapp, self.meta.dPoolp - self.meta.iMapp)
+        """Reads in all IMap entries into memory."""
+        size = self.meta.dPoolp - self.meta.iMapp
+        data = b""
+        amountRead = 0
+        while size - amountRead > 0:
+            data += self.read(self.meta.iMapp + amountRead)
+            amountRead += self.meta._ssize
+        data = data[:size]
         res = []
         for i in range(len(data) // 4):
             offset = i * 4
             res.append(bread("i", data[offset: offset + 4]))
         return res
+
+    def readSector(self, imap):
+        return self.read(self.meta.dPoolp + imap * self.meta._ssize)
 
     def readDirectory(self, inode):
         file = self.readFile(inode)
@@ -41,10 +76,9 @@ class Image:
     def readFile(self, inode):
         imaps = self.getImaps(inode)
         data = b""
-        for map in imaps:
-            data += self.read(self.meta.dPoolp + map * self.meta._ssize, self.meta._ssize)
+        for index in imaps:
+            data += self.readSector(index)
         return FileEntry(data[:self.iNodes[inode].size])
-
 
     def getImaps(self, inode):
         res = [self.iNodes[inode].fip]
@@ -53,11 +87,62 @@ class Image:
             if nv >= 0:
                 res.append(nv)
                 continue
-            if nv == -1:
+            if nv == -1: # Might need different logic to handle this error
                 print("Ran into unallocated imap while attemtping to read inode")
                 exit(1)
             break
         return res
+
+    def getFreeImap(self):
+        for i in len(self.iMaps):
+            if self.iMaps[i] == -1:
+                return i
+
+    def writeInode(self, inode):
+        location = self.iNodes[inode].offset
+        data = self.read(location)
+        data[:32] = self.iNodes[inode].toBytes()
+        self.write(location, data)
+
+    def writeImap(self, imap):
+        location = self.meta.iMapp + imap * 4
+        data = self.read(location)
+        data[:4] = self.iMaps[imap]
+        self.write(location, data)
+    
+    def writeFile(self, inode, offset, data):
+        if offset >  self.iNodes[inode].size:
+            print("Tried to write after the end of a file")
+            exit(1)
+        if offset + len(data) > self.iNodes[inode].size:
+            self.iNodes[inode].size = offset + len(data)
+            self.writeInode(inode)
+        imaps = self.getImaps(inode)
+        remainder = offset % self.meta._ssize
+        location = imaps[offset // self.meta._ssize]
+        sector = self.readSector(location)
+        if self.meta._ssize >= len(data) + remainder:
+            sector = sector[:remainder] + data + sector[remainder + len(data):]
+            self.writeSector(location, sector)
+        else:
+            amountWritten = self.meta._ssize - remainder
+            sector = sector[:remainder] + data[:amountWritten]
+            self.writeSector(location, sector)
+            while True:
+                nlocation = self.iMaps[location]
+                if location == -2:
+                    nlocation = self.getFreeImap()
+                    self.iMaps[location] = nlocation
+                    self.writeImap(location)
+                sector = self.readSector(location)
+                if self.meta._ssize >= len(data) - amountWritten:
+                    sector = data[amountWritten:] + sector[len(data) - amountWritten:]
+                    self.writeSector(nlocation, sector)
+                    return 0
+                sector = data[amountWritten:amountWritten + self.meta._ssize]
+                self.writeSector(nlocation, sector)
+                amountWritten += self.meta._ssize
+                location = nlocation
 
 
 class MetaData:
@@ -93,6 +178,10 @@ class INode:
 
     def __repr__(self):
         return " ".join(f"{k} {w}" for k,w in vars(self).items())
+    
+    def toBytes(self):
+        modeBits = (self.mode << 12) & (self.s_ugt << 9) & (self.user << 6) & (self.group << 3) & self.other
+        return struct.pack(">2h7i", modeBits, self.linkCount, self.ownerUID, self.ownerGID, self.cTime, self.mTime, self.aTime, self.size, self.fip)
 
 
 class FileEntry:
@@ -100,7 +189,7 @@ class FileEntry:
         self.data = data
 
     def __repr__(self):
-        return data.decode()
+        return self.data.decode()
 
 
 class DirectoryEntry:
@@ -113,8 +202,12 @@ class DirectoryEntry:
 
 
 if __name__ == "__main__":
-    file = open(sys.argv[1], "rb")
-    image = Image(file)
+    image = Image(sys.argv[1])
     print(image.iMap[:10])
     [print(node) for node in image.iNodes[:10]]
     print(image.readDirectory(0))
+    print(image.readFile(2))
+    image.writeFile(2, 2, b"lol")
+    print(image.readFile(2))
+    image.writeFile(2, 2, b"llo")
+    print(image.readFile(2))
