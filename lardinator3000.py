@@ -23,15 +23,6 @@ class Image:
         data = file.read()[offset: offset + self.meta._ssize]
         file.close()
         return data
-
-    def write(self, offset, sector):
-        file = open(self.filename, "wb")
-        file.seek(offset)
-        file.write(sector)
-        file.close()
-
-    def writeSector(self, imap, sector):
-        self.write(self.meta.dPoolp + imap * self.meta._ssize, sector)
     
     def readIList(self):
         """Reads in INodes from IList and stores them in memory."""
@@ -97,6 +88,15 @@ class Image:
         for i in len(self.iMaps):
             if self.iMaps[i] == -1:
                 return i
+
+    def write(self, offset, sector):
+        file = open(self.filename, "r+b")
+        file.seek(offset)
+        file.write(sector)
+        file.close()
+
+    def writeSector(self, imap, sector):
+        self.write(self.meta.dPoolp + imap * self.meta._ssize, sector)
 
     def writeInode(self, inode):
         location = self.iNodes[inode].offset
