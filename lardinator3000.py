@@ -12,13 +12,16 @@ class Image:
     Holds the data and in memory portions of file. Also holds 
     all of the functions to interact with the file system.
     """
-    def __init__(self, filename):
-        self.filename = filename
-        self.meta = MetaData(open(self.filename, "rb").read()[:28])
+    def __init__(self, image_file):
+        self.image_file = image_file 
+        self.meta = MetaData(image_file.read()[:28])
         self.iNodes = self.readIList()
         self.iMap = self.readIMap()
     
     def getImaps(self, inode):
+        """
+        Return all the imap entries related to an inode.
+        """
         res = [self.iNodes[inode].fip]
         while True:
             nv = self.iMap[res[-1]]
@@ -31,28 +34,27 @@ class Image:
             break
         return res
 
-    def getFreeImap(self):
-        for i in range(len(self.iMap)):
-            if self.iMap[i] == -1:
-                self.writeSector(i, b"\0" * self.meta._ssize) # zero out block
-                return i
-
-    def unallocate(self, imap):
+    def unallocateImap(self, imap):
+        """
+        Set an imap to unallocated. We zero out 
+        dsectors when we alloc, so not here. 
+        """
         self.iMap[imap] = -1
         self.writeImap(imap)
 
     def truncate(self, inode, nsize):
+        """
+        Truncate a file to a given size.
+        """
         ninode = self.iNodes[inode]
         # do logic for unallocating blocks 
         imaps = self.getImaps(inode)
         for counter, imap in enumerate(imaps[::-1]): # iterate backwards in order to unallocate imaps at end of file first
-            print(ninode.size - counter * self.meta._ssize, nsize)
             if (ninode.size - counter * self.meta._ssize) // self.meta._ssize == nsize // self.meta._ssize:
                 self.iMap[imap] = -2 
                 self.writeImap(imap)
                 break
-            self.unallocate(imap)
-        print(self.iMap)
+            self.unallocateImap(imap)
         imap = self.getImaps(inode)[-1]
 
         # zero out block that the nsize truncate falls in
@@ -60,28 +62,20 @@ class Image:
         nsector = self.readSector(imap)[:nsize % self.meta._ssize] + nsector[nsize % self.meta._ssize:]
         ninode.size = nsize
         self.iNodes[inode] = ninode
-        self.writeInode(inode)
+        self.writeInode(inode) # write inode first in case of crash
         self.writeSector(imap, nsector)
             
-
-    def write(self, offset, sector):
-        file = open(self.filename, "r+b")
-        file.seek(offset)
-        file.write(sector)
-        file.close()
-
-    def writeSector(self, imap, sector):
-        self.write(self.meta.dPoolp + imap * self.meta._ssize, sector)
-
     def read(self, offset):
-        """Reads size bytes from offset in the file."""
-        file = open(self.filename, "rb")
-        data = file.read()[offset: offset + self.meta._ssize]
-        file.close()
-        return data
+        """
+        Reads size bytes from offset in the file.
+        """
+        self.image_file.seek(offset)
+        return self.image_file.read()[:self.meta._ssize]
     
     def readIList(self):
-        """Reads in INodes from IList and stores them in memory."""
+        """
+        Reads in INodes from IList and stores them in memory.
+        """
         size = self.meta.iMapp - self.meta.iListp
         data = b""
         amountRead = 0
@@ -96,7 +90,9 @@ class Image:
         return res
 
     def readIMap(self):
-        """Reads in all IMap entries into memory."""
+        """
+        Reads in all IMap entries into memory.
+        """
         size = self.meta.dPoolp - self.meta.iMapp
         data = b""
         amountRead = 0
@@ -111,9 +107,13 @@ class Image:
         return res
 
     def readSector(self, imap):
+        """Return data from a given data sector as indexed by imap."""
         return self.read(self.meta.dPoolp + imap * self.meta._ssize)
 
     def readDirectory(self, inode):
+        """
+        A wrapper that uses readFile but parses into DirectoryEntries afterwards.
+        """
         file = self.readFile(inode)
         res = []
         for i in range(self.iNodes[inode].size // 32):
@@ -121,52 +121,64 @@ class Image:
         return res
             
     def readFile(self, inode):
+        """
+        Reads by grabbing the start imap out of inode and then
+        chaining together until we reach inode.size data.
+        """
         imaps = self.getImaps(inode)
         data = b""
         for index in imaps:
             data += self.readSector(index)
         return FileEntry(data[:self.iNodes[inode].size])
 
-    def getImaps(self, inode):
-        res = [self.iNodes[inode].fip]
-        while True:
-            nv = self.iMap[res[-1]]
-            if nv >= 0:
-                res.append(nv)
-                continue
-            if nv == -1: # Might need different logic to handle this error
-                print("Ran into unallocated imap while attemtping to read inode")
-                exit(1)
-            break
-        return res
-
     def allocImap(self):
+        """
+        Finds the first available unallocated imap,
+        zeroes it out and returns its index.
+        """
         for i in range(len(self.iMap)):
             if self.iMap[i] == -1:
+                self.writeSector(i, b"\0" * self.meta._ssize) # zero out block
                 return i
 
     def write(self, offset, sector):
-        file = open(self.filename, "r+b")
-        file.seek(offset)
-        file.write(sector)
-        file.close()
+        """
+        Writes a sector at the given offset in the file.
+        """
+        self.image_file.seek(offset)
+        self.image_file.write(sector)
 
     def writeSector(self, imap, sector):
+        """
+        Calls write on the sector designated by imap.
+        """
         self.write(self.meta.dPoolp + imap * self.meta._ssize, sector)
 
     def writeInode(self, inode):
+        """
+        Writes an inode back to the file without
+        modifying the surrounding inodes.
+        """
         location = self.iNodes[inode].offset
         data = self.read(location)
         data = self.iNodes[inode].toBytes() + data[32:]
         self.write(location, data)
 
     def writeImap(self, imap):
+        """
+        Writes back the in memory imap to disk.
+        """
         location = self.meta.iMapp + imap * 4
         data = self.read(location)
         data = struct.pack(">i", self.iMap[imap]) + data[4:]
         self.write(location, data)
     
     def writeFile(self, inode, offset, data):
+        """
+        Writes data to the file designated by inode 
+        at offset and updates relating metadata. 
+        Expands file if necessary.
+        """
         if offset >  self.iNodes[inode].size:
             print("Tried to write after the end of a file")
             exit(1)
@@ -175,7 +187,7 @@ class Image:
             self.writeInode(inode)
         imaps = self.getImaps(inode)
         if offset // self.meta._ssize > (len(imaps) - 1):
-            nimap = self.getFreeImap()
+            nimap = self.allocImap()
             self.iMap[imaps[-1]] = nimap
             self.iMap[nimap] = -2
             self.writeImap(imaps[-2])
@@ -194,7 +206,7 @@ class Image:
             while True:
                 nlocation = self.iMap[location]
                 if location == -2:
-                    nlocation = self.getFreeImap()
+                    nlocation = self.allocImap()
                     self.iMap[location] = nlocation
                     self.writeImap(location)
                 sector = self.readSector(location)
@@ -207,9 +219,11 @@ class Image:
                 amountWritten += self.meta._ssize
                 location = nlocation
 
-    # finds the first free inode and allocates it using inodeType
-    # if there are no inodes left we print an error and die
     def allocInode(self, inodeType: int) -> int:
+        """
+        Finds the first free inode and allocates it using inodeType.
+        If there are no inodes left we print an error and die.
+        """
         modeBits = 0x21ED # current user bits (future implementations will receive userbits to set)
         for i in self.iNodes:
             if i.mode == 0: # 0 == unallocated
@@ -235,6 +249,9 @@ class Image:
 
 
 class MetaData:
+    """
+    Holds and manages all the metadata in the superblock.
+    """
     def __init__(self, data):
         self.magic = bread("8s", data[:8])
         self._ssize = bread("i", data[8:12])
@@ -248,6 +265,9 @@ class MetaData:
 
 
 class INode:
+    """
+    An INode entry. Holds and manages its metadata.
+    """
     def __init__(self, data, offset):
         self.offset = offset
         modeBits = bread("h", data[:2])
@@ -265,15 +285,20 @@ class INode:
         self.size = bread("i", data[24:28])
         self.fip = bread("i", data[28:32])
 
+    def modeBits(self):
+        return (self.mode << 12) | (self.s_ugt << 9) | (self.user << 6) | (self.group << 3) | self.other
+
     def __repr__(self):
         return " ".join(f"{k} {w}" for k,w in vars(self).items())
     
     def toBytes(self):
-        modeBits = (self.mode << 12) & (self.s_ugt << 9) & (self.user << 6) & (self.group << 3) & self.other
-        return struct.pack(">2h7i", modeBits, self.linkCount, self.ownerUID, self.ownerGID, self.cTime, self.mTime, self.aTime, self.size, self.fip)
+        return struct.pack(">2h7i", self.modeBits(), self.linkCount, self.ownerUID, self.ownerGID, self.cTime, self.mTime, self.aTime, self.size, self.fip)
 
 
 class FileEntry:
+    """
+    A file entry.
+    """
     def __init__(self, data):
         self.data = data
 
@@ -282,9 +307,16 @@ class FileEntry:
 
 
 class DirectoryEntry:
+    """
+    A directory entry that points to another inode and holds a name.
+    """
     def __init__(self, data):
         self.inode = bread("i", data[0:4])
-        self.name = data[4:].decode()
+        self.name = data[4:]
+        for i, e in enumerate(self.name):
+            if e == 0:
+                self.name = self.name[:i].decode()
+                break
 
     def __repr__(self):
         return f"({self.inode}) {self.name}"

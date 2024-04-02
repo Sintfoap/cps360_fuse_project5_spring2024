@@ -1,7 +1,7 @@
 from lardinator3000 import Image
 
 def getImage():
-    return Image("./lardfs.img")
+    return Image(open("./lardfs.img", "rb+"))
 
 def testRead():
     image = getImage()
@@ -26,8 +26,16 @@ def testWrite():
     assert len(image.getImaps(4)) == 4
     image.truncate(4, 1337)
     assert len(image.getImaps(4)) == 3
+
+def testAllocInode():
+    image = getImage()
+    [print(inode) for inode in image.iNodes[:10]]
+    assert len([inode for inode in image.iNodes if inode.mode != 0]) == 5
+    image.allocInode(2)
+    assert len([inode for inode in image.iNodes if inode.mode != 0]) == 6
+    assert image.iNodes[5].mode == 2
     
 
 if __name__ == "__main__":
     image = getImage()
-    [print(i) for i in image.iNodes[:5]] 
+    testWrite()
