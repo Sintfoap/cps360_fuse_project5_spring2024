@@ -144,6 +144,18 @@ class Image:
                 amountWritten += self.meta._ssize
                 location = nlocation
 
+    def allocInode(self) -> int:
+        for i in self.iNodes:
+            if i.mode == 0:
+                i.mode = 0b0010
+                i.s_ugt = 0b0000
+                i.user = 0b111
+                i.group = 0b101
+                i.other = 0b101
+
+                
+        return 0
+
 
 class MetaData:
     def __init__(self, data):
