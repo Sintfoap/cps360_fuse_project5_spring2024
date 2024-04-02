@@ -261,6 +261,7 @@ Illustrates the use of allocInode for creating inode entries.
 ## waiter.py
 
 ![Oh yeah. It's all coming together.](./necessary%20assets/27d.jpg)
+
 We've finally made it into the home stretch. `waiter.py` holds all of the functionallity necessary for running the lardfs system using FUSE. To a varying degree that is.
 
 ### Configuration
