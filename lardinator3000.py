@@ -87,8 +87,8 @@ class Image:
         return res
 
     def allocImap(self):
-        for i in len(self.iMaps):
-            if self.iMaps[i] == -1:
+        for i in range(len(self.iMap)):
+            if self.iMap[i] == -1:
                 return i
 
     def write(self, offset, sector):
@@ -109,7 +109,7 @@ class Image:
     def writeImap(self, imap):
         location = self.meta.iMapp + imap * 4
         data = self.read(location)
-        data[:4] = self.iMaps[imap]
+        data[:4] = self.iMap[imap]
         self.write(location, data)
     
     def writeFile(self, inode, offset, data):
@@ -146,10 +146,12 @@ class Image:
                 amountWritten += self.meta._ssize
                 location = nlocation
 
-    def allocInode(self, inodeType) -> int:
-        modeBits = 0x21ED
+    # finds the first free inode and allocates it using inodeType
+    # if there are no inodes left we print an error and die
+    def allocInode(self, inodeType: int) -> int:
+        modeBits = 0x21ED # current user bits (future implementations will receive userbits to set)
         for i in self.iNodes:
-            if i.mode == 0:
+            if i.mode == 0: # 0 == unallocated
                 i.mode = inodeType
                 i.s_ugt = (modeBits & 0x0E00) >> 9
                 i.user = (modeBits & 0x01C0) >> 6
@@ -158,11 +160,13 @@ class Image:
                 i.linkCount = 0x01
                 i.ownerUID = 0x03E8
                 i.ownerGID = 0x03E8
-                i.cTime = (time.mktime((datetime.datetime.now()).timetuple()))
+                i.cTime = int(time.mktime((datetime.datetime.now()).timetuple())) # gets the current time and converts it to unix timestamp, convert to int to truncate
                 i.mTime = i.cTime
                 i.aTime = i.cTime
                 i.size = 0
-                i.fip = allocImap()
+                i.fip = self.allocImap() # assign first free Imap
+                self.iMap[i.fip] = -2 # mark as EOF
+                self.writeImap(i.fip) # write to file
                 return i.offset
 
         print("lardinator3000 ERROR: out of inodes")
@@ -235,3 +239,4 @@ if __name__ == "__main__":
     print(image.readFile(2))
     image.writeFile(2, 2, b"llo")
     print(image.readFile(2))
+    image.allocInode(0b0001)
