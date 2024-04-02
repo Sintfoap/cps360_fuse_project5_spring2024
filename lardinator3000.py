@@ -1,5 +1,7 @@
 import sys
 import struct
+import datetime
+import time
 
 def bread(fmt, data):
     """Takes a struct format string and data to read from to return the interpreted data"""
@@ -124,6 +126,34 @@ class Image:
         for index in imaps:
             data += self.readSector(index)
         return FileEntry(data[:self.iNodes[inode].size])
+
+    def getImaps(self, inode):
+        res = [self.iNodes[inode].fip]
+        while True:
+            nv = self.iMap[res[-1]]
+            if nv >= 0:
+                res.append(nv)
+                continue
+            if nv == -1: # Might need different logic to handle this error
+                print("Ran into unallocated imap while attemtping to read inode")
+                exit(1)
+            break
+        return res
+
+    def allocImap(self):
+        for i in range(len(self.iMap)):
+            if self.iMap[i] == -1:
+                return i
+
+    def write(self, offset, sector):
+        file = open(self.filename, "r+b")
+        file.seek(offset)
+        file.write(sector)
+        file.close()
+
+    def writeSector(self, imap, sector):
+        self.write(self.meta.dPoolp + imap * self.meta._ssize, sector)
+
     def writeInode(self, inode):
         location = self.iNodes[inode].offset
         data = self.read(location)
@@ -176,6 +206,32 @@ class Image:
                 self.writeSector(nlocation, sector)
                 amountWritten += self.meta._ssize
                 location = nlocation
+
+    # finds the first free inode and allocates it using inodeType
+    # if there are no inodes left we print an error and die
+    def allocInode(self, inodeType: int) -> int:
+        modeBits = 0x21ED # current user bits (future implementations will receive userbits to set)
+        for i in self.iNodes:
+            if i.mode == 0: # 0 == unallocated
+                i.mode = inodeType
+                i.s_ugt = (modeBits & 0x0E00) >> 9
+                i.user = (modeBits & 0x01C0) >> 6
+                i.group = (modeBits & 0x0038) >> 3
+                i.other = modeBits & 0x0007
+                i.linkCount = 0x01
+                i.ownerUID = 0x03E8
+                i.ownerGID = 0x03E8
+                i.cTime = int(time.mktime((datetime.datetime.now()).timetuple())) # gets the current time and converts it to unix timestamp, convert to int to truncate
+                i.mTime = i.cTime
+                i.aTime = i.cTime
+                i.size = 0
+                i.fip = self.allocImap() # assign first free Imap
+                self.iMap[i.fip] = -2 # mark as EOF
+                self.writeImap(i.fip) # write to file
+                return i.offset
+
+        print("lardinator3000 ERROR: out of inodes")
+        exit(-1)
 
 
 class MetaData:
