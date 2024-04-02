@@ -182,11 +182,11 @@ class Image:
         if offset >  self.iNodes[inode].size:
             print("Tried to write after the end of a file")
             exit(1)
-        if offset + len(data) > self.iNodes[inode].size:
+        if offset + len(data) > self.iNodes[inode].size:  # expand inode size if necessary
             self.iNodes[inode].size = offset + len(data)
             self.writeInode(inode)
         imaps = self.getImaps(inode)
-        if offset // self.meta._ssize > (len(imaps) - 1):
+        if offset // self.meta._ssize > (len(imaps) - 1): # allocate imaps if necessary
             nimap = self.allocImap()
             self.iMap[imaps[-1]] = nimap
             self.iMap[nimap] = -2
@@ -194,13 +194,13 @@ class Image:
             self.writeImap(imaps[-1])
             imaps = self.getImaps(inode)
         remainder = offset % self.meta._ssize
-        location = imaps[offset // self.meta._ssize]
+        location = imaps[offset // self.meta._ssize]  # find first sector that we need to write to
         sector = self.readSector(location)
-        if self.meta._ssize >= len(data) + remainder:
+        if self.meta._ssize >= len(data) + remainder:  # first sector write
             sector = sector[:remainder] + data + sector[remainder + len(data):]
             self.writeSector(location, sector)
         else:
-            amountWritten = self.meta._ssize - remainder
+            amountWritten = self.meta._ssize - remainder  # write to more sectors as long as there's more data to write
             sector = sector[:remainder] + data[:amountWritten]
             self.writeSector(location, sector)
             while True:
