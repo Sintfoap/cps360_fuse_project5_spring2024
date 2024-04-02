@@ -46,8 +46,8 @@ class Image:
         # do logic for unallocating blocks 
         imaps = self.getImaps(inode)
         for counter, imap in enumerate(imaps[::-1]): # iterate backwards in order to unallocate imaps at end of file first
-            print(counter, ninode.size, nsize)
-            if (ninode.size - (counter * self.meta._ssize)) < nsize:
+            print(ninode.size - counter * self.meta._ssize, nsize)
+            if (ninode.size - counter * self.meta._ssize) // self.meta._ssize == nsize // self.meta._ssize:
                 self.iMap[imap] = -2 
                 self.writeImap(imap)
                 break
