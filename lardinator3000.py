@@ -1,5 +1,7 @@
 import sys
 import struct
+import datetime
+import time
 
 def bread(fmt, data):
     """Takes a struct format string and data to read from to return the interpreted data"""
@@ -84,7 +86,7 @@ class Image:
             break
         return res
 
-    def getFreeImap(self):
+    def allocImap(self):
         for i in len(self.iMaps):
             if self.iMaps[i] == -1:
                 return i
@@ -131,7 +133,7 @@ class Image:
             while True:
                 nlocation = self.iMaps[location]
                 if location == -2:
-                    nlocation = self.getFreeImap()
+                    nlocation = self.allocImap()
                     self.iMaps[location] = nlocation
                     self.writeImap(location)
                 sector = self.readSector(location)
@@ -144,17 +146,27 @@ class Image:
                 amountWritten += self.meta._ssize
                 location = nlocation
 
-    def allocInode(self) -> int:
+    def allocInode(self, inodeType) -> int:
+        modeBits = 0x21ED
         for i in self.iNodes:
             if i.mode == 0:
-                i.mode = 0b0010
-                i.s_ugt = 0b0000
-                i.user = 0b111
-                i.group = 0b101
-                i.other = 0b101
+                i.mode = inodeType
+                i.s_ugt = (modeBits & 0x0E00) >> 9
+                i.user = (modeBits & 0x01C0) >> 6
+                i.group = (modeBits & 0x0038) >> 3
+                i.other = modeBits & 0x0007
+                i.linkCount = 0x01
+                i.ownerUID = 0x03E8
+                i.ownerGID = 0x03E8
+                i.cTime = (time.mktime((datetime.datetime.now()).timetuple()))
+                i.mTime = i.cTime
+                i.aTime = i.cTime
+                i.size = 0
+                i.fip = allocImap()
+                return i.offset
 
-                
-        return 0
+        print("lardinator3000 ERROR: out of inodes")
+        exit(-1)
 
 
 class MetaData:
