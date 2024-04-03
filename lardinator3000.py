@@ -173,6 +173,24 @@ class Image:
         data = struct.pack(">i", self.iMap[imap]) + data[4:]
         self.write(location, data)
     
+    def writeDirectory(self, parent_inode, inode, name):
+        """
+        Takes in an inode to put an entry into, the parent_inode, an
+        inode to link to, and a name and adds an entry to said parent_inode.
+        """
+        payload = struct.pack(">i28s", inode, name) 
+        data = self.readDirectory(parent_inode)
+        offset = -1
+        for e, dir in enumerate(data):  # find empty dir spot
+            if dir.name == "" and dir.data == 0:
+                offset = e * 32
+                break
+        if offset == -1:  # if no open dir entry in all the blocks, then we need to allocate a new block
+            offset = len(data) * 32
+        self.writeFile(parent_inode, offset, payload)
+        self.iNodes[parent_inode].linkCount += 1
+        self.writeInode(inode)
+
     def writeFile(self, inode, offset, data):
         """
         Writes data to the file designated by inode 
@@ -219,13 +237,13 @@ class Image:
                 amountWritten += self.meta._ssize
                 location = nlocation
 
-    def allocInode(self, inodeType: int) -> int:
+    def allocInode(self, inodeType: int, mode: int) -> int:
         """
         Finds the first free inode and allocates it using inodeType.
         If there are no inodes left we print an error and die.
         """
-        modeBits = 0x21ED # current user bits (future implementations will receive userbits to set)
-        for i in self.iNodes:
+        modeBits = mode
+        for e, i in enumerate(self.iNodes):
             if i.mode == 0: # 0 == unallocated
                 i.mode = inodeType
                 i.s_ugt = (modeBits & 0x0E00) >> 9
@@ -242,7 +260,7 @@ class Image:
                 i.fip = self.allocImap() # assign first free Imap
                 self.iMap[i.fip] = -2 # mark as EOF
                 self.writeImap(i.fip) # write to file
-                return i.offset
+                return e 
 
         print("lardinator3000 ERROR: out of inodes")
         exit(-1)

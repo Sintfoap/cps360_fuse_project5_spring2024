@@ -25,9 +25,12 @@ class LardFS(llfuse.Operations):
 #       log.debug("access")
 #       raise llfuse.FUSEError(errno.ENOSYS)
 
-#   def create(self, parent_inode, name, mode, flags, ctx):
-#       log.debug("create")
-#       raise llfuse.FUSEError(errno.ENOSYS)
+    def create(self, parent_inode, name, mode, flags, ctx):
+        log.debug("create")
+        ninode = self.image.allocInode(1, mode)
+        self.image.writeDirectory(parent_inode - 1, ninode, name)
+        return (ninode + 1, self.getattr(ninode + 1))
+        
 
     def destroy(self):
         self.image.image_file.close()
@@ -167,6 +170,7 @@ class LardFS(llfuse.Operations):
     def write(self, fh, off, buff):
         log.debug(f"write {fh}")
         self.image.writeFile(fh - 1, off, buff)
+        return len(buff)
         
 
 def init_logging(debug=False):
