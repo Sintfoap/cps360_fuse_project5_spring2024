@@ -90,10 +90,13 @@ class LardFS(llfuse.Operations):
                 return self.getattr(dir.inode + 1)
         raise llfuse.FUSEError(errno.ENOENT)
         
-#   
-#   def mkdir(self, parent_inode, name, mode, rdev, ctx):
-#       log.debug("mkdir")
-#       raise llfuse.FUSEError(errno.ENOSYS)
+   
+    def mkdir(self, parent_inode, name, mode, ctx):
+        log.debug("mkdir")
+        ninode = self.image.allocInode(2, mode)
+        self.image.writeDirectory(parent_inode - 1, ninode, name)
+        return self.getattr(ninode + 1)
+        
 
 #   def mknod(self, parent_inode, name, mode, rdev, ctx):
 #       log.debug("mknod")
