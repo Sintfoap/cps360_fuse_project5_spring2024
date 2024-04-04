@@ -45,9 +45,8 @@ class LardFS(llfuse.Operations):
     def fsync(self, fh, datasync):
         log.debug(f"fsync {fh}")
 
-#   def fsyncdir(self, fh, datasync):
-#       log.debug("fsyncdir")
-#       raise llfuse.FUSEError(errno.ENOSYS)
+    def fsyncdir(self, fh, datasync):
+        log.debug("fsyncdir")
 
     def getattr(self, inode, ctx=None):
         inodeEntry = self.image.iNodes[inode - 1]
@@ -77,7 +76,7 @@ class LardFS(llfuse.Operations):
 #   def link(self, inode, new_parent_inode, new_name, ctx):
 #       log.debug("link")
 #       raise llfuse.FUSEError(errno.ENOSYS)
-#       
+
 #   def listxattr(self, inode, ctx):
 #       log.debug("listxattr")
 #       raise llfuse.FUSEError(errno.ENOSYS)
@@ -97,7 +96,6 @@ class LardFS(llfuse.Operations):
         self.image.writeDirectory(parent_inode - 1, ninode, name)
         return self.getattr(ninode + 1)
         
-
 #   def mknod(self, parent_inode, name, mode, rdev, ctx):
 #       log.debug("mknod")
 #       raise llfuse.FUSEError(errno.ENOSYS)
@@ -142,14 +140,24 @@ class LardFS(llfuse.Operations):
 #       log.debug("rename")
 #       raise llfuse.FUSEError(errno.ENOSYS)
 
-#   def rmdir(self, parent_inode, name, ctx):
-#       log.debug("rmdir")
-#       raise llfuse.FUSEError(errno.ENOSYS)
-
+    def rmdir(self, parent_inode, name, ctx):
+        log.debug("rmdir")
+        dirs = self.image.readDirectory(parent_inode - 1)
+        inode = -1
+        for dir in dirs:
+            if dir.name.encode() == name:
+                inode = dir.inode
+        if inode == -1:
+            raise llfuse.FUSEError(errno.NOENT)
+        dirs = self.image.readDirectory(inode)
+        if len(dirs) != 0:
+            raise llfuse.FUSEError(errno.ENOTEMPTY)
+        self.image.wipe(inode)
+                
 #   def setattr(self, inode, attr, fields, fh, ctx):
 #       log.debug("setattr")
 #       raise llfuse.FUSEError(errno.ENOSYS)
-#       
+       
 #   def setxattr(self, inode, name, value, ctx):
 #       log.debug("setxattr")
 #       raise llfuse.FUSEError(errno.ENOSYS)
@@ -161,7 +169,7 @@ class LardFS(llfuse.Operations):
 #   def statfs(self):
 #       log.debug("statfs")
 #       raise llfuse.FUSEError(errno.ENOSYS)
-#       
+       
 #   def symlink(self, parent_inode, name, target, ctx):
 #       log.debug("symlink")
 #       raise llfuse.FUSEError(errno.ENOSYS)

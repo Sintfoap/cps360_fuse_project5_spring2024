@@ -64,6 +64,14 @@ class Image:
         self.iNodes[inode] = ninode
         self.writeInode(inode) # write inode first in case of crash
         self.writeSector(imap, nsector)
+    
+    def wipe(self, inode):
+        ninode = self.iNodes[inode]
+        data = self.read(ninode.offset)
+        blank = (b'\x00' * 32)
+        data = blank + data[32:]
+        self.write(ninode.offset, data)
+        self.iNodes[inode] = INode(blank, ninode.offset)
             
     def read(self, offset):
         """
