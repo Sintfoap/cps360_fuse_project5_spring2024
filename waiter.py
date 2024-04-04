@@ -74,13 +74,12 @@ class LardFS(llfuse.Operations):
 #       log.debug("getxattr")
 #       raise llfuse.FUSEError(errno.ENOSYS)
 
-    # def link(self, inode, new_parent_inode, new_name, ctx):
-    #     log.debug("link")
-    #     # targetInode = self.image.getInode(inode - 1)
-    #     # newInodeNum = self.image.allocInode(targetInode.mode, targetInode.modeBits())
-    #     # newInode = self.image.linkInode(inode, newInodeNum)
-    #     self.image.linkInode(inode, new_parent_inode)
-    #     raise llfuse.FUSEError(errno.ENOSYS)
+    def link(self, inode, new_parent_inode, new_name, ctx):
+        raise llfuse.FUSEError(errno.ENOSYS)
+        log.debug("link")
+        self.image.linkInode(inode, new_parent_inode)
+        self.image.writeDirectory(new_parent_inode, inode, new_name)
+        return self.getattr(inode)
 #       
 #   def listxattr(self, inode, ctx):
 #       log.debug("listxattr")
@@ -182,6 +181,9 @@ class LardFS(llfuse.Operations):
         stat_.f_files = len(self.image.iNodes)
         stat_.f_ffree = self.image.getNumFreeInodes()
         stat_.f_favail = stat_.f_ffree
+
+        stat_.f_namemax = 28
+
         return stat_
 #       
 #   def symlink(self, parent_inode, name, target, ctx):
