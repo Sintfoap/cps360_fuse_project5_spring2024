@@ -33,6 +33,35 @@ class Image:
                 exit(1)
             break
         return res
+    
+    def getInode(self, inodeNum: int):
+        """
+        Returns an inode obj from iNodes @ index:inodeNum
+        """
+        return self.iNodes[inodeNum]
+    
+
+    def getNumFreeInodes(self) -> int:
+        """
+        Calculates and returns the number of free inodes in the system
+        """
+        count = 0
+        for i in self.iNodes:
+            if i.mode == 0:
+                count += 1
+
+        return count
+
+    def getNumFreeImaps(self) -> int:
+        """
+        Calculates and returns the number of free blocks in the system
+        """
+        count = 0
+        for i in self.iMap:
+            if i == -1 or i == 0:
+                count += 1
+
+        return count
 
     def unallocateImap(self, imap):
         """
@@ -264,6 +293,17 @@ class Image:
 
         print("lardinator3000 ERROR: out of inodes")
         exit(-1)
+
+    def linkInode(self, targetInodeNum: int, newInodeNum: int) -> int:
+        """
+        Copies the necessary data over from an Inode to link new to target
+        """
+        self.iNodes[newInodeNum].ownerUID = self.iNodes[targetInodeNum].ownerUID
+        self.iNodes[newInodeNum].ownerGID = self.iNodes[targetInodeNum].ownerGID
+        self.iNodes[newInodeNum].size = self.iNodes[targetInodeNum].size
+        self.iNodes[newInodeNum].fip = self.iNodes[targetInodeNum].fip
+        self.iNodes[targetInodeNum].linkCount += 1
+        return newInodeNum
 
 
 class MetaData:

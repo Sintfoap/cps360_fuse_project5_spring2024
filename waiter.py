@@ -74,9 +74,13 @@ class LardFS(llfuse.Operations):
 #       log.debug("getxattr")
 #       raise llfuse.FUSEError(errno.ENOSYS)
 
-#   def link(self, inode, new_parent_inode, new_name, ctx):
-#       log.debug("link")
-#       raise llfuse.FUSEError(errno.ENOSYS)
+    # def link(self, inode, new_parent_inode, new_name, ctx):
+    #     log.debug("link")
+    #     # targetInode = self.image.getInode(inode - 1)
+    #     # newInodeNum = self.image.allocInode(targetInode.mode, targetInode.modeBits())
+    #     # newInode = self.image.linkInode(inode, newInodeNum)
+    #     self.image.linkInode(inode, new_parent_inode)
+    #     raise llfuse.FUSEError(errno.ENOSYS)
 #       
 #   def listxattr(self, inode, ctx):
 #       log.debug("listxattr")
@@ -158,9 +162,27 @@ class LardFS(llfuse.Operations):
 #       log.debug("stacktrace")
 #       raise llfuse.FUSEError(errno.ENOSYS)
 
-#   def statfs(self):
-#       log.debug("statfs")
-#       raise llfuse.FUSEError(errno.ENOSYS)
+    def statfs(self, ctx):
+        """
+        returns statistics about the file system in the statvfs struct from llfuse.StatvfsData()
+        test using df --block-size 512
+        """
+        log.debug("statfs")
+        stat_ = llfuse.StatvfsData()
+
+        stat_.f_bsize = 512
+        stat_.f_frsize = 768
+        
+        size = 512 * stat_.f_frsize
+        stat_.f_blocks = size // stat_.f_frsize
+        sz = self.image.getNumFreeImaps() * 512
+        stat_.f_bfree = sz // stat_.f_frsize # I dont know why the math maths this way, but it doesnt work any other way 
+        stat_.f_bavail = stat_.f_bfree 
+
+        stat_.f_files = len(self.image.iNodes)
+        stat_.f_ffree = self.image.getNumFreeInodes()
+        stat_.f_favail = stat_.f_ffree
+        return stat_
 #       
 #   def symlink(self, parent_inode, name, target, ctx):
 #       log.debug("symlink")
