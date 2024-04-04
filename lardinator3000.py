@@ -34,12 +34,6 @@ class Image:
             break
         return res
     
-    def getInode(self, inodeNum: int):
-        """
-        Returns an inode obj from iNodes @ index:inodeNum
-        """
-        return self.iNodes[inodeNum]
-    
 
     def getNumFreeInodes(self) -> int:
         """
