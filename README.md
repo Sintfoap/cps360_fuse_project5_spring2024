@@ -69,12 +69,13 @@ We’ve tried this on WSL to see if we could get it to work without a VM for Win
 
 - Linux, FreeBSD, NetBSD or MacOS X system – We only did Linux, so can’t vouch for the process on any of the others.
 - Python – We were using 3.10.12 at the time of writing.
-- setuptools – Python module
-- contextlib2 – Python module
-- pkg-config
-- attr
-- C compiler
-- llfuse
+- setuptools 59.6.0 – Python module
+- contextlib2 21.6.0 – Python module 
+- llfuse 11.5.0 – Python module
+- pkg-config 0.29.2
+- attr 1.2.5.1
+- gcc 11.4.0
+- libfuse-dev 2.9.9
 
 <!-- TOC --><a name="build"></a>
 ### Build

@@ -33,6 +33,29 @@ class Image:
                 exit(1)
             break
         return res
+    
+
+    def getNumFreeInodes(self) -> int:
+        """
+        Calculates and returns the number of free inodes in the system
+        """
+        count = 0
+        for i in self.iNodes:
+            if i.mode == 0:
+                count += 1
+
+        return count
+
+    def getNumFreeImaps(self) -> int:
+        """
+        Calculates and returns the number of free blocks in the system
+        """
+        count = 0
+        for i in self.iMap:
+            if i == -1 or i == 0:
+                count += 1
+
+        return count
 
     def unallocateImap(self, imap):
         """
@@ -245,15 +268,14 @@ class Image:
                 amountWritten += self.meta._ssize
                 location = nlocation
 
-    def allocInode(self, inodeType: int, mode: int) -> int:
+    def allocInode(self, modeBits: int) -> int:
         """
-        Finds the first free inode and allocates it using inodeType.
+        Finds the first free inode and allocates it using inodeType with the given modeBits
         If there are no inodes left we print an error and die.
         """
-        modeBits = mode
         for e, i in enumerate(self.iNodes):
             if i.mode == 0: # 0 == unallocated
-                i.mode = inodeType
+                i.mode = (modeBits & 0xf000) >> 12
                 i.s_ugt = (modeBits & 0x0E00) >> 9
                 i.user = (modeBits & 0x01C0) >> 6
                 i.group = (modeBits & 0x0038) >> 3
@@ -265,13 +287,39 @@ class Image:
                 i.mTime = i.cTime
                 i.aTime = i.cTime
                 i.size = 0
-                i.fip = self.allocImap() # assign first free Imap
+                if i.mode != 3:  # if file is a symlink, we don't allocate a new imap
+                    i.fip = self.allocImap() # assign first free Imap
                 self.iMap[i.fip] = -2 # mark as EOF
                 self.writeImap(i.fip) # write to file
                 return e 
 
         print("lardinator3000 ERROR: out of inodes")
         exit(-1)
+
+    def hardLinkInode(self, targetInodeNum: int, newInodeNum: int) -> int:
+        """
+        Copies the necessary data over from targetInode to newInode to link
+        """
+        self.iNodes[targetInodeNum].linkCount += 1
+        self.iNodes[newInodeNum].ownerUID = self.iNodes[targetInodeNum].ownerUID
+        self.iNodes[newInodeNum].ownerGID = self.iNodes[targetInodeNum].ownerGID
+        self.iNodes[newInodeNum].size = self.iNodes[targetInodeNum].size
+        self.iNodes[newInodeNum].linkCount = self.iNodes[targetInodeNum].linkCount
+
+        return newInodeNum
+    
+    def softLinkInode(self, targetInodeNum: int, newInodeNum: int, namelength: int):
+        """
+        Copies the necessary data over from targetInode to create a soft link to target
+        """
+        self.iNodes[newInodeNum].ownerUID = self.iNodes[targetInodeNum].ownerUID
+        self.iNodes[newInodeNum].ownerGID = self.iNodes[targetInodeNum].ownerGID
+        self.iNodes[newInodeNum].size = self.iNodes[targetInodeNum].size
+        self.iNodes[newInodeNum].fip = self.iNodes[targetInodeNum].fip
+        self.iNodes[targetInodeNum].mTime = int(time.mktime((datetime.datetime.now()).timetuple()))
+        self.iNodes[targetInodeNum].linkCount += 1
+
+        return
 
 
 class MetaData:
