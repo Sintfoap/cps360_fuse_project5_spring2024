@@ -260,18 +260,18 @@ class Image:
                 amountWritten += self.meta._ssize
                 location = nlocation
 
-    def allocInode(self, mode: int) -> int:
+    def allocInode(self, modeBits: int) -> int:
         """
         Finds the first free inode and allocates it using inodeType with the given modeBits
         If there are no inodes left we print an error and die.
         """
         for e, i in enumerate(self.iNodes):
             if i.mode == 0: # 0 == unallocated
-                i.mode = (mode & 0xf000) >> 12
-                i.s_ugt = (mode & 0x0E00) >> 9
-                i.user = (mode & 0x01C0) >> 6
-                i.group = (mode & 0x0038) >> 3
-                i.other = mode & 0x0007
+                i.mode = (modeBits & 0xf000) >> 12
+                i.s_ugt = (modeBits & 0x0E00) >> 9
+                i.user = (modeBits & 0x01C0) >> 6
+                i.group = (modeBits & 0x0038) >> 3
+                i.other = modeBits & 0x0007
                 i.linkCount = 0x01
                 i.ownerUID = 0x03E8
                 i.ownerGID = 0x03E8
@@ -299,17 +299,18 @@ class Image:
 
         return newInodeNum
     
-    def softLinkInode(self, targetInodeNum: int, newInodeNum: int, namelength: int) -> int:
+    def softLinkInode(self, targetInodeNum: int, newInodeNum: int, namelength: int):
         """
-        Copies the necessary data over from targetInode to create a soft link to targetInode
+        Copies the necessary data over from targetInode to create a soft link to target
         """
-
         self.iNodes[newInodeNum].ownerUID = self.iNodes[targetInodeNum].ownerUID
         self.iNodes[newInodeNum].ownerGID = self.iNodes[targetInodeNum].ownerGID
         self.iNodes[newInodeNum].size = namelength + 1
+        self.iNodes[newInodeNum].fip = self.iNodes[targetInodeNum].fip
+        self.iNodes[targetInodeNum].mTime = int(time.mktime((datetime.datetime.now()).timetuple()))
+        self.iNodes[targetInodeNum].linkCount += 1
 
-
-        return newInodeNum
+        return
 
 
 class MetaData:

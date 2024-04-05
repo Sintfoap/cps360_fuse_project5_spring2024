@@ -190,10 +190,14 @@ class LardFS(llfuse.Operations):
         stat_.f_namemax = 28
 
         return stat_
-#       
-#   def symlink(self, parent_inode, name, target, ctx):
-#       log.debug("symlink")
-#       raise llfuse.FUSEError(errno.ENOSYS)
+      
+    def symlink(self, parent_inode, name, targetName, ctx):
+        log.debug("symlink")
+        targetInode = (self.lookup(parent_inode, targetName, ctx)).st_ino - 1
+        ninode = self.image.allocInode(self.image.iNodes[targetInode].modeBits())
+        self.image.softLinkInode(targetInode, ninode, len(name))
+        self.image.writeDirectory(parent_inode - 1, ninode, name)
+        return self.getattr(ninode)
 
 #   def unlink(self, parent_inode, name, ctx):
 #       log.debug("unlink")
