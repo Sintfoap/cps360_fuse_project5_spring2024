@@ -279,7 +279,8 @@ class Image:
                 i.mTime = i.cTime
                 i.aTime = i.cTime
                 i.size = 0
-                i.fip = self.allocImap() # assign first free Imap
+                if i.mode != 3:  # if file is a symlink, we don't allocate a new imap
+                    i.fip = self.allocImap() # assign first free Imap
                 self.iMap[i.fip] = -2 # mark as EOF
                 self.writeImap(i.fip) # write to file
                 return e 

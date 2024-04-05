@@ -79,12 +79,13 @@ class LardFS(llfuse.Operations):
         target Inode is the file we are linking, targetInodeDir is the targetInodes directory
         This function allocates a new inode and puts it in targetInodeDir
         """
-        log.debug(f"link targetInode: {targetInode}, targetInode: {targetInodeDir}, newName: {new_name} ")
-        log.debug(f" targetInode: {self.image.getInode(targetInode)}, targetInode: {self.image.getInode(targetInodeDir)} ")
-        newiNode = self.image.allocInode(self.image.iNodes[targetInode].modeBits)
-        self.image.hardLinkInode(targetInode, newiNode)
-        self.image.writeDirectory(targetInode, targetInodeDir, new_name)
-        return self.getattr(targetInode)
+        log.debug("link")
+        niNode = self.image.allocInode(self.image.iNodes[targetInode].modeBits)
+        self.image.hardLinkInode(targetInode, niNode)
+        targetContents = self.image.readFile(targetInode).data.decode()
+        self.image.writeFile(niNode, 0, targetContents)
+        self.image.writeDirectory(targetInodeDir, niNode, new_name)
+        return self.getattr(niNode)
 #       
 #   def listxattr(self, inode, ctx):
 #       log.debug("listxattr")
@@ -191,17 +192,26 @@ class LardFS(llfuse.Operations):
 
         return stat_
       
-    def symlink(self, parent_inode, name, targetName, ctx):
-        log.debug("symlink")
-        targetInode = (self.lookup(parent_inode, targetName, ctx)).st_ino - 1
-        ninode = self.image.allocInode(self.image.iNodes[targetInode].modeBits())
-        self.image.softLinkInode(targetInode, ninode, len(name))
-        self.image.writeDirectory(parent_inode - 1, ninode, name)
-        return self.getattr(ninode + 1)
 
-#   def unlink(self, parent_inode, name, ctx):
-#       log.debug("unlink")
-#       raise llfuse.FUSEError(errno.ENOSYS)
+    def symlink(self, parent_inode, linkName, targetName, ctx):
+        """
+        Receives a directory inode, the name of the link, and the target file name in bytes
+        Words cannot describe my confusion and outrage when I figured out that the name of the target was passed in instead of the inode
+        Also, doing ln -s will give an input/output error, but I don't know why
+        """
+        log.debug("symlink")
+        targetInode = (self.lookup(parent_inode, targetName, ctx)).st_ino - 1 # find the inode using the name >:(
+        ninode = self.image.allocInode(self.image.iNodes[targetInode].modeBits() | 0x3000) # allocate a new inode specifying or-ing the bits to make it a symlink
+        self.image.softLinkInode(targetInode, ninode, len(linkName)) # copy the necessary fields
+        self.image.writeDirectory(parent_inode - 1, ninode, linkName) # write to dir
+        return self.getattr(ninode + 1) # ret
+
+
+
+    def unlink(self, parent_inode, name, ctx):
+        raise llfuse.FUSEError(errno.ENOSYS)        
+        log.debug("unlink")
+        targetInode = (self.lookup(parent_inode, name, ctx)).st_ino - 1
 
     def write(self, fh, off, buff):
         log.debug(f"write {fh}")
