@@ -27,7 +27,7 @@ class LardFS(llfuse.Operations):
 
     def create(self, parent_inode, name, mode, flags, ctx):
         log.debug("create")
-        ninode = self.image.allocInode(1, mode)
+        ninode = self.image.allocInode(mode)
         self.image.writeDirectory(parent_inode - 1, ninode, name)
         return (ninode + 1, self.getattr(ninode + 1))
         
@@ -101,7 +101,7 @@ class LardFS(llfuse.Operations):
    
     def mkdir(self, parent_inode, name, mode, ctx):
         log.debug("mkdir")
-        ninode = self.image.allocInode(2, mode)
+        ninode = self.image.allocInode(mode)
         self.image.writeDirectory(parent_inode - 1, ninode, name)
         return self.getattr(ninode + 1)
         
