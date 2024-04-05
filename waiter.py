@@ -197,7 +197,7 @@ class LardFS(llfuse.Operations):
         ninode = self.image.allocInode(self.image.iNodes[targetInode].modeBits())
         self.image.softLinkInode(targetInode, ninode, len(name))
         self.image.writeDirectory(parent_inode - 1, ninode, name)
-        return self.getattr(ninode)
+        return self.getattr(ninode + 1)
 
 #   def unlink(self, parent_inode, name, ctx):
 #       log.debug("unlink")

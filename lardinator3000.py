@@ -305,7 +305,7 @@ class Image:
         """
         self.iNodes[newInodeNum].ownerUID = self.iNodes[targetInodeNum].ownerUID
         self.iNodes[newInodeNum].ownerGID = self.iNodes[targetInodeNum].ownerGID
-        self.iNodes[newInodeNum].size = namelength + 1
+        self.iNodes[newInodeNum].size = self.iNodes[targetInodeNum].size
         self.iNodes[newInodeNum].fip = self.iNodes[targetInodeNum].fip
         self.iNodes[targetInodeNum].mTime = int(time.mktime((datetime.datetime.now()).timetuple()))
         self.iNodes[targetInodeNum].linkCount += 1
