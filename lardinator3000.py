@@ -148,7 +148,9 @@ class Image:
         file = self.readFile(inode)
         res = []
         for i in range(self.iNodes[inode].size // 32):
-            res.append(DirectoryEntry(file.data[i * 32: (i + 1) * 32]))
+            entry = DirectoryEntry(file.data[i * 32: (i + 1) * 32]) 
+            if entry.name != "":
+                res.append(entry)
         return res
             
     def readFile(self, inode):
@@ -219,7 +221,7 @@ class Image:
             if delete and dir.name.encode() == name:
                 offset = e * 32
                 break
-            elif dir.name.encode()[0] == b'\x00':
+            elif dir.name == "":
                 offset = e * 32
                 break
         if offset == -1:  # if no open dir entry in all the blocks, then we need to allocate a new block
