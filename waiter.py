@@ -134,9 +134,36 @@ class LardFS(llfuse.Operations):
                 continue
             yield(name, attr, ino)
 
-#   def readlink(self, inode, ctx):
-#       log.debug("readlink")
-#       raise llfuse.FUSEError(errno.ENOSYS)
+    def readlink(self, inode, ctx):
+        log.debug("readlink")
+        """
+        takes a file, if the file is not a symlink, it returns nothing
+        if the pointer is dangling, it returns the appropriate error
+        """
+        if self.image.iNodes[inode - 1].mode != 3:
+            log.debug("waiter.py: File wasn't a symlink")
+            return
+        
+        retInode = None
+        for i, node in enumerate(self.image.iNodes):
+            if node.mode != 3 and node.fip == self.image.iNodes[inode - 1].fip:
+                retInode = i
+                break
+
+        if retInode == None:
+            log.debug("the inode we are looking for was not found")
+            raise llfuse.FUSEError(errno.ENOLINK)
+
+        for i, node in enumerate(self.image.iNodes):
+            if node.mode == 2:
+                entrys = self.image.readDirectory(i)
+                for j in entrys:
+                    if j.inode == retInode:
+                        return j.name.encode()
+                    
+        log.debug("no dir with matching file :(")
+        raise llfuse.FUSEError(errno.ENOLINK)
+
 
     def release(self, fh):
         log.debug(f"release {fh}")
@@ -232,8 +259,8 @@ class LardFS(llfuse.Operations):
         if targetInode == None:
             raise llfuse.FUSEError(errno.ENOENT)
         ninode = self.image.allocInode(3, self.image.iNodes[targetInode].modeBits()) # allocate a new inode specifying or-ing the bits to make it a symlink
-        self.image.softLinkInode(targetInode, ninode, len(linkName)) # copy the necessary fields
-        self.image.writeDirectory(parent_inode - 1, inodl=ninode, name=linkName) # write to dir
+        self.image.softLinkInode(targetInode, ninode) # copy the necessary fields
+        self.image.writeDirectory(parent_inode - 1, inode=ninode, name=linkName) # write to dir
         return self.getattr(ninode + 1) # ret
 
     def unlink(self, parent_inode, name, ctx):

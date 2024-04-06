@@ -305,7 +305,7 @@ class Image:
         print("lardinator3000 ERROR: out of inodes")
         exit(-1)
     
-    def softLinkInode(self, targetInodeNum: int, newInodeNum: int, namelength: int):
+    def softLinkInode(self, targetInodeNum: int, newInodeNum: int):
         """
         Copies the necessary data over from targetInode to create a soft link to target
         """
@@ -315,7 +315,6 @@ class Image:
         self.iNodes[newInodeNum].fip = self.iNodes[targetInodeNum].fip
         self.iNodes[targetInodeNum].mTime = int(time.mktime((datetime.datetime.now()).timetuple()))
         self.iNodes[targetInodeNum].linkCount += 1
-
         return
 
 
