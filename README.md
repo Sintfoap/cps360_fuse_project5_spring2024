@@ -141,7 +141,7 @@ The LARD filesystem (lardfs) combines elements of the classic Unix filesystem (i
 ### Axioms
 
 - The filesystem “root” is always i-node 0.
-- All numeric fields are in big endian.
+- All numeric fields are BIG ENDIAN.
 - Signed integers are 2’s complement.
 
 <!-- TOC --><a name="format"></a>
@@ -149,7 +149,6 @@ The LARD filesystem (lardfs) combines elements of the classic Unix filesystem (i
 
 - superblock:
   - 8-byte ASCII magic string: "LARDFS\n\0"
-  - (all numeric fields BIG ENDIAN)
   - 4-byte: sector size (in bytes)
   - 4-byte: image size (in sectors)
   - 4-byte: start-of-i-list (in sectors)
@@ -243,7 +242,7 @@ Holds all the metadata for i-lists. The two fields to really watch out for are d
 <!-- TOC --><a name="lardinator3000py"></a>
 ## lardinator3000.py
 
-Some troubles came up due to our last implementation of parsing lardfs images, mainly the fact that we weren't set up in any reasonable way to write back to the image. `readLardFS.py` did a fantastic job of parsing out the directories, but that's just it. That's all it did. In order to be able to implement the API calls for FUSE, we needed to have a much better way of maintaining the file structure during reads and modifications while still being fairly easy to expand. For our case, we prioritized simplicity over efficiency, meaning that some of the code written here is very dumb, but that's on purpose. Due to that being our goal, we kept the filesystem modifications purely synchronous which, while being unrealistic, made it much easier to maintain and expand. I'll explain in this section how our code works logically, and in the next section I'll explain how that meshes with llfuse.
+Some troubles came up due to our last implementation of parsing lardfs images, mainly the fact that we weren't set up in any reasonable way to write back to the image. `readLardFS.py` did a fantastic job of parsing out the directories, but that's just it. That's all it did. In order to be able to implement the API calls for FUSE, we needed to have a much better way of maintaining the file structure during reads and modifications while still being fairly easy to expand. So behold! The Lardinator 3000! For our case, we prioritized simplicity over efficiency, meaning that some of the code written here is very dumb, but that's on purpose. Due to that being our goal, we kept the filesystem modifications purely synchronous which, while being unrealistic, made it much easier to maintain and expand. I'll explain in this section how our code works logically, and in the next section I'll explain how that meshes with llfuse.
 
 <!-- TOC --><a name="image"></a>
 ### Image
@@ -330,6 +329,27 @@ These two are related because truncate is the only thing other than file deletio
 
 The start of file creation! This function is pretty self explanitory, it creates an `INode` of `inodeType` file type. This also handles the initial setting of permission bits, so that can get a bit exciting.
 
+<!-- TOC --><a name="softlinkinode"></a>
+### softLinkInode
+
+This function copies necessary information for making a symlink from a existing inode to a freshly created inode!
+Namely it copies:
+  - ownerUID
+  - ownerGID
+  - size
+  - fip
+It also sets the modification time to the current time, and increments the link count of the target inode.
+
+<!-- TOC --><a name="getnumfreeinodes"></a>
+### getNumFreeInodes
+Returns the number of unused inodes, for the purpose of statting the file system.
+
+
+<!-- TOC --><a name="getnumfreeimaps"></a>
+### getNumFreeImaps
+Returns the number of unused sectors/imaps, for the purpose of statting the file system.
+
+
 <!-- TOC --><a name="soustestpy"></a>
 ## SousTest.py
 
@@ -365,7 +385,7 @@ Looking at the `main` function, you can see we first parse in the command line a
 <!-- TOC --><a name="lardfs"></a>
 ### LardFS
 
-This class implements `llfuse.Operations`, which allows FUSE to look at this class for functionallity regarding the filesystem. We also initialize our `Image` class here to manage the disk version of the filesystem. One thing of note here is that we do `inode - 1` or `inode + 1` a lot throughout this system. The reason for that is that all the `Inode`s in `Image` are 0-based, and llfuse's inodes are 1-based.
+This class implements `llfuse.Operations`, which allows FUSE to look at this class for functionality regarding the filesystem. We also initialize our `Image` class here to manage the disk version of the filesystem. One thing of note here is that we do `inode - 1` or `inode + 1` a lot throughout this system. The reason for that is that all the `Inode`s in `Image` are 0-based, and llfuse's inodes are 1-based.
 
 <!-- TOC --><a name="flush-and-fsync"></a>
 #### flush and fsync
@@ -381,3 +401,18 @@ For reading directories, we need to implement the `opendir`, `readdir`, `release
 #### Reading Files
 
 Reading files is much simpler than directories in my opinion. All we need for this is the `open`, `read`, and `release` calls. `open` and `release` are essentially no-ops for the same reason as directories. Reading files is made super easy due to the functionallity of `Image`, so we just call `readFile` and call it a day.
+
+<!-- TOC --><a name="linking-files"></a>
+#### Linking Files
+
+For linking files, we need to implement: `link`, `symlink`, `readlink` and `unlink`. For creating hard links `link` is used, which essentially just creates a new directory entry bound to the target files inode. For creating softlinks, we have to implement `symlink` and `readlink`. We don't quite know why it calls `readlink`, but we assume it is a check to make sure the link is valid. It will also be called when you call a function like `cat` on the file. `readlink` takes the symlink and finds the file it is pointing at and prints the name out. As for `symlink`, this does the actual linking, which simply allocates a new inode and copies over the necessary information for a symlink. Finally, as the name implies, `unlink` removes links to files. We actually implemented `symlink` first out of all of these, and we were quite confused when it would produce a working symlink but the linking call would output an error. When we implemented `readlink`, the errors went away, and that's when we figured it out.
+
+<!-- TOC --><a name="renaming-files"></a>
+#### Renaming Files
+
+To rename a file, we implemented the `rename` function. It takes the old parent directory inode and old name, deletes the old directory entry, then creates a new file entry in the new directory. Shrimple as that.
+
+<!-- TOC --><a name="file-system-info"></a>
+#### File System info
+
+There exist certain commands to get information about your file system, such as the number of inodes and blocks. To implement this, we implement `statfs`. This gets a struct from llfuse, and populates it according to the block size, fragment size, number of inodes and blocks, and how many inodes and blocks are free. Regarding how to do the math to populate the number of blocks, freeblocks, and available blocks, I have no earthly idea how the math works, I just tried variations of what the example fuse function did until it produced the correct results.
