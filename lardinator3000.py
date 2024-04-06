@@ -304,18 +304,6 @@ class Image:
 
         print("lardinator3000 ERROR: out of inodes")
         exit(-1)
-
-    def hardLinkInode(self, targetInodeNum: int, newInodeNum: int) -> int:
-        """
-        Copies the necessary data over from targetInode to newInode to link
-        """
-        self.iNodes[targetInodeNum].linkCount += 1
-        self.iNodes[newInodeNum].ownerUID = self.iNodes[targetInodeNum].ownerUID
-        self.iNodes[newInodeNum].ownerGID = self.iNodes[targetInodeNum].ownerGID
-        self.iNodes[newInodeNum].size = self.iNodes[targetInodeNum].size
-        self.iNodes[newInodeNum].linkCount = self.iNodes[targetInodeNum].linkCount
-
-        return newInodeNum
     
     def softLinkInode(self, targetInodeNum: int, newInodeNum: int, namelength: int):
         """
