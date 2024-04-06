@@ -292,7 +292,7 @@ class Image:
                 i.linkCount = 0x01
                 i.ownerUID = 0x03E8
                 i.ownerGID = 0x03E8
-                i.cTime = int(time.mktime((datetime.datetime.now()).timetuple())) # gets the current time and converts it to unix timestamp, convert to int to truncate
+                i.cTime = int(time.mktime((datetime.datetime.now()).timetuple()) * 1e9) # gets the current time and converts it to unix timestamp, convert to int to truncate 
                 i.mTime = i.cTime
                 i.aTime = i.cTime
                 i.size = 0
@@ -363,20 +363,26 @@ class INode:
         self.linkCount = bread("h", data[2:4])
         self.ownerUID = bread("i", data[4:8])
         self.ownerGID = bread("i", data[8:12])
-        self.cTime = bread("i", data[12:16])
-        self.mTime = bread("i", data[16:20])
-        self.aTime = bread("i", data[20:24])
+        self.cTime = int(bread("i", data[12:16]) * 1e9)
+        self.mTime = int(bread("i", data[16:20]) * 1e9)
+        self.aTime = int(bread("i", data[20:24]) * 1e9)
         self.size = bread("i", data[24:28])
         self.fip = bread("i", data[28:32])
 
     def modeBits(self):
         return (self.mode << 12) | (self.s_ugt << 9) | (self.user << 6) | (self.group << 3) | self.other
 
+    def chmod(self, databits):
+        self.s_ugt = (databits & 0x0E00)
+        self.user =  (databits & 0x01C0) >> 6
+        self.group  = (databits & 0x0038) >> 3
+        self.other = databits & 0x0007
+
     def __repr__(self):
         return " ".join(f"{k} {w}" for k,w in vars(self).items())
     
     def toBytes(self):
-        return struct.pack(">2h7i", self.modeBits(), self.linkCount, self.ownerUID, self.ownerGID, self.cTime, self.mTime, self.aTime, self.size, self.fip)
+        return struct.pack(">2h7i", self.modeBits(), self.linkCount, self.ownerUID, self.ownerGID, int(self.cTime / 1e9), int(self.mTime / 1e9), int(self.aTime / 1e9), self.size, self.fip)
 
 
 class FileEntry:

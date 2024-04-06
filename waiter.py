@@ -169,9 +169,24 @@ class LardFS(llfuse.Operations):
         self.image.writeDirectory(parent_inode - 1, name=name, delete=True)
         self.image.wipe(inode)
                 
-#   def setattr(self, inode, attr, fields, fh, ctx):
-#       log.debug("setattr")
-#       raise llfuse.FUSEError(errno.ENOSYS)
+    def setattr(self, inode, attr, fields, fh, ctx):
+        log.debug("setattr")
+        if fields.update_size:
+            self.image.truncate(inode - 1, attr.st_size)
+        if fields.update_mode:
+            self.image.iNodes[inode - 1].chmod(attr.st_mode)
+        if fields.update_uid:
+            self.image.iNodes[inode - 1].ownerUID = attr.st_uid
+        if fields.update_gid:
+            self.image.iNodes[inode - 1].ownerGID = attr.gid
+        if fields.update_atime:
+            self.image.iNodes[inode - 1].aTime = attr.st_atime_ns
+        if fields.update_mtime:
+            self.image.iNodes[inode - 1].mTime = attr.st_mtime_ns
+        self.image.writeInode(inode - 1)
+        return self.getattr(inode)
+
+
        
 #   def setxattr(self, inode, name, value, ctx):
 #       log.debug("setxattr")
