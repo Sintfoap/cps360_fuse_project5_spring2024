@@ -204,23 +204,30 @@ class Image:
         data = struct.pack(">i", self.iMap[imap]) + data[4:]
         self.write(location, data)
     
-    def writeDirectory(self, parent_inode, inode, name):
+    def writeDirectory(self, parent_inode, *, inode=-1, name, delete=False):
         """
         Takes in an inode to put an entry into, the parent_inode, an
         inode to link to, and a name and adds an entry to said parent_inode.
         """
-        payload = struct.pack(">i28s", inode, name) 
+        if delete:
+            payload = b'\x00' * 32
+        else:
+            payload = struct.pack(">i28s", inode, name) 
         data = self.readDirectory(parent_inode)
         offset = -1
         for e, dir in enumerate(data):  # find empty dir spot
-            if dir.name == "" and dir.data == 0:
+            if delete and dir.name.encode() == name:
+                offset = e * 32
+                break
+            elif dir.name.encode()[0] == b'\x00':
                 offset = e * 32
                 break
         if offset == -1:  # if no open dir entry in all the blocks, then we need to allocate a new block
             offset = len(data) * 32
         self.writeFile(parent_inode, offset, payload)
         self.iNodes[parent_inode].linkCount += 1
-        self.writeInode(inode)
+        if not delete:
+            self.writeInode(inode)
 
     def writeFile(self, inode, offset, data):
         """
@@ -268,14 +275,14 @@ class Image:
                 amountWritten += self.meta._ssize
                 location = nlocation
 
-    def allocInode(self, modeBits: int) -> int:
+    def allocInode(self, filetype: int, modeBits: int) -> int:
         """
         Finds the first free inode and allocates it using inodeType with the given modeBits
         If there are no inodes left we print an error and die.
         """
         for e, i in enumerate(self.iNodes):
             if i.mode == 0: # 0 == unallocated
-                i.mode = (modeBits & 0xf000) >> 12
+                i.mode = filetype
                 i.s_ugt = (modeBits & 0x0E00) >> 9
                 i.user = (modeBits & 0x01C0) >> 6
                 i.group = (modeBits & 0x0038) >> 3
@@ -344,6 +351,7 @@ class INode:
     """
     def __init__(self, data, offset):
         self.offset = offset
+        self.lookupCount = 1
         modeBits = bread("h", data[:2])
         self.mode = (modeBits & 0xf000) >> 12
         self.s_ugt = (modeBits & 0x0E00) >> 9

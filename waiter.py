@@ -27,9 +27,9 @@ class LardFS(llfuse.Operations):
 
     def create(self, parent_inode, name, mode, flags, ctx):
         log.debug("create")
-        ninode = self.image.allocInode(mode)
-        self.image.writeDirectory(parent_inode - 1, ninode, name)
-        return (ninode + 1, self.getattr(ninode + 1))
+        ninode = self.image.allocInode(1, mode)
+        self.image.writeDirectory(parent_inode - 1, inode=ninode, name=name)
+        return (ninode + 1, self.getattr(ninode + 1)) # We don't explicity increment lookupCount here because it's set in class INode
         
 
     def destroy(self):
@@ -38,12 +38,19 @@ class LardFS(llfuse.Operations):
     def flush(self, fh):
         log.debug(f"flush {fh}")
         
-#   def forget(self, inode_list):
-#       log.debug("forget")
-#       raise llfuse.FUSEError(errno.ENOSYS)
+    def forget(self, inode_list):
+        log.debug("forget")
+        for inode, nlookup in inode_list:
+            if self.image.iNodes[inode - 1].lookupCount > nlookup:
+                self.image.iNodes[inode - 1].lookupCount -= nlookup
+            elif self.image.iNodes[inode - 1].linkCount == 0: # lookupCount would've been set to zero since lookupCount was <= to nlookup
+                self.image.iNodes[inode - 1].mode = 0
+            else:
+                self.image.iNodes[inode - 1].lookupCount = 0
+            self.image.writeInode(inode - 1)
 
     def fsync(self, fh, datasync):
-        log.debug(f"fsync {fh}")
+        log.debug(f"fsync")
 
     def fsyncdir(self, fh, datasync):
         log.debug("fsyncdir")
@@ -71,7 +78,6 @@ class LardFS(llfuse.Operations):
 
 #   def getxattr(self, inode, name, ctx):
 #       log.debug("getxattr")
-#       raise llfuse.FUSEError(errno.ENOSYS)
 
     def link(self, targetInode, targetInodeDir, new_name, ctx):
         """
@@ -83,27 +89,28 @@ class LardFS(llfuse.Operations):
         self.image.hardLinkInode(targetInode, niNode)
         targetContents = self.image.readFile(targetInode).data.decode()
         self.image.writeFile(niNode, 0, targetContents)
-        self.image.writeDirectory(targetInodeDir, niNode, new_name)
+        self.image.writeDirectory(targetInodeDir - 1, inode=niNode, name=new_name)
         return self.getattr(niNode)
 
 #   def listxattr(self, inode, ctx):
 #       log.debug("listxattr")
-#       raise llfuse.FUSEError(errno.ENOSYS)
 
     def lookup(self, parent_inode, name, ctx):
         log.debug(f"lookup {name} {parent_inode}")
         directories = self.image.readDirectory(parent_inode - 1)
         for dir in directories:
             if dir.name.encode() == name:
+                self.image.iNodes[dir.inode].lookupCount += 1
+                self.image.writeInode(dir.inode)
                 return self.getattr(dir.inode + 1)
         raise llfuse.FUSEError(errno.ENOENT)
         
    
     def mkdir(self, parent_inode, name, mode, ctx):
         log.debug("mkdir")
-        ninode = self.image.allocInode(mode)
-        self.image.writeDirectory(parent_inode - 1, ninode, name)
-        return self.getattr(ninode + 1)
+        ninode = self.image.allocInode(2, mode)
+        self.image.writeDirectory(parent_inode - 1, inode=ninode, name=name)
+        return self.getattr(ninode + 1) # We don't explicity increment lookupCount here because it's set in class INode
         
 #   def mknod(self, parent_inode, name, mode, rdev, ctx):
 #       log.debug("mknod")
@@ -143,7 +150,6 @@ class LardFS(llfuse.Operations):
 
 #   def removexattr(self, inode, name, ctx):
 #       log.debug("removexattr")
-#       raise llfuse.FUSEError(errno.ENOSYS)
 
 #   def rename(self, parent_inode_old, name_old, parent_inode_new, name_new, ctx):
 #       log.debug("rename")
@@ -161,6 +167,7 @@ class LardFS(llfuse.Operations):
         dirs = self.image.readDirectory(inode)
         if len(dirs) != 0:
             raise llfuse.FUSEError(errno.ENOTEMPTY)
+        self.image.writeDirectory(parent_inode - 1, name=name, delete=True)
         self.image.wipe(inode)
                 
 #   def setattr(self, inode, attr, fields, fh, ctx):
@@ -169,7 +176,6 @@ class LardFS(llfuse.Operations):
        
 #   def setxattr(self, inode, name, value, ctx):
 #       log.debug("setxattr")
-#       raise llfuse.FUSEError(errno.ENOSYS)
 
 #   def stacktrace(self):
 #       log.debug("stacktrace")
@@ -208,18 +214,34 @@ class LardFS(llfuse.Operations):
         Also, doing ln -s will give an input/output error, but I don't know why
         """
         log.debug("symlink")
-        targetInode = (self.lookup(parent_inode, targetName, ctx)).st_ino - 1 # find the inode using the name >:(
-        ninode = self.image.allocInode(self.image.iNodes[targetInode].modeBits() | 0x3000) # allocate a new inode specifying or-ing the bits to make it a symlink
+        directories = self.image.readDirectory(parent_inode - 1)
+        targetInode = None
+        for dir in directories:
+            if dir.name.encode() == targetName:
+                targetInode = dir.inode
+                break
+        if targetInode == None:
+            raise llfuse.FUSEError(errno.ENOENT)
+        ninode = self.image.allocInode(3, self.image.iNodes[targetInode].modeBits()) # allocate a new inode specifying or-ing the bits to make it a symlink
         self.image.softLinkInode(targetInode, ninode, len(linkName)) # copy the necessary fields
-        self.image.writeDirectory(parent_inode - 1, ninode, linkName) # write to dir
+        self.image.writeDirectory(parent_inode - 1, inodl=ninode, name=linkName) # write to dir
         return self.getattr(ninode + 1) # ret
 
-
-
     def unlink(self, parent_inode, name, ctx):
-        raise llfuse.FUSEError(errno.ENOSYS)        
         log.debug("unlink")
-        targetInode = (self.lookup(parent_inode, name, ctx)).st_ino - 1
+        directories = self.image.readDirectory(parent_inode - 1)
+        targetInode = None
+        for dir in directories:
+            if dir.name.encode() == name:
+                targetInode = dir.inode
+                break
+        if targetInode == None:
+            raise llfuse.FUSEError(errno.ENOENT)
+        self.image.writeDirectory(parent_inode - 1, name=name, delete=True)
+        self.image.iNodes[targetInode].linkCount -= 1
+        if self.image.iNodes[targetInode].linkCount == 0 and self.image.iNodes[targetInode].lookupCount == 0:
+            self.image.iNodes[targetInode].mode = 0 
+        self.image.writeInode(targetInode)
 
     def write(self, fh, off, buff):
         log.debug(f"write {fh}")
