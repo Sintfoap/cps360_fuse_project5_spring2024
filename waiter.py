@@ -30,7 +30,6 @@ class LardFS(llfuse.Operations):
         ninode = self.image.allocInode(1, mode)
         self.image.writeDirectory(parent_inode - 1, inode=ninode, name=name)
         return (ninode + 1, self.getattr(ninode + 1)) # We don't explicity increment lookupCount here because it's set in class INode
-        
 
     def destroy(self):
         self.image.image_file.close()
