@@ -147,9 +147,22 @@ class LardFS(llfuse.Operations):
 #   def removexattr(self, inode, name, ctx):
 #       log.debug("removexattr")
 
-#   def rename(self, parent_inode_old, name_old, parent_inode_new, name_new, ctx):
-#       log.debug("rename")
-#       raise llfuse.FUSEError(errno.ENOSYS)
+    def rename(self, parent_inode_old, name_old, parent_inode_new, name_new, ctx):
+        """
+        You'll never guess what this function does
+        """
+        log.debug("rename")
+        directories = self.image.readDirectory(parent_inode_old - 1)
+        targetInode = None
+        for dir in directories:
+            if dir.name.encode() == name_old:
+                targetInode = dir.inode
+                break
+        if targetInode == None:
+            raise llfuse.FUSEError(errno.ENOENT)
+        self.image.writeDirectory(parent_inode_old - 1, name=name_old, delete=True)
+        self.image.writeDirectory(parent_inode_new - 1, inode=targetInode, name=name_new)
+        return
 
     def rmdir(self, parent_inode, name, ctx):
         log.debug("rmdir")
