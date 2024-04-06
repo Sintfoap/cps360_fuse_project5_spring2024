@@ -81,16 +81,13 @@ class LardFS(llfuse.Operations):
 
     def link(self, targetInode, targetInodeDir, new_name, ctx):
         """
-        target Inode is the file we are linking, targetInodeDir is the targetInodes directory
-        This function allocates a new inode and puts it in targetInodeDir
+        Creates a hard link to an inode
         """
         log.debug("link")
-        niNode = self.image.allocInode(self.image.iNodes[targetInode].modeBits)
-        self.image.hardLinkInode(targetInode, niNode)
-        targetContents = self.image.readFile(targetInode).data.decode()
-        self.image.writeFile(niNode, 0, targetContents)
-        self.image.writeDirectory(targetInodeDir - 1, inode=niNode, name=new_name)
-        return self.getattr(niNode)
+        self.image.writeDirectory(parent_inode=targetInodeDir - 1, inode=targetInode - 1, name=new_name)
+        self.image.iNodes[targetInode - 1].linkCount += 1
+        self.image.iNodes[targetInode - 1].lookupCount += 1
+        return self.getattr(targetInode, ctx)
 
 #   def listxattr(self, inode, ctx):
 #       log.debug("listxattr")
